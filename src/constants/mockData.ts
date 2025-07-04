@@ -34,20 +34,19 @@ export const waterTanks: WaterTankData[] = [
   }
 ];
 
+// 保留 main battery 的模拟数据，backup battery 将使用实际数据
 export const batteries: BatteryData[] = [
   {
     id: 'main-battery',
     name: 'Main Battery',
-    level: 85,
+    percentage: 85,
     voltage: 12.7,
-    type: 'main'
-  },
-  {
-    id: 'backup-battery',
-    name: 'Backup Battery',
-    level: 90,
-    voltage: 12.8,
-    type: 'backup'
+    temperature: 25,
+    status: '正常',
+    isCharging: false,
+    current: -5.2,
+    power: -67.0,
+    cycleCount: 156
   }
 ];
 

@@ -1,7 +1,20 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BatteryData } from '../../types';
 
+interface BatteryIndicatorProps {
+  battery: BatteryData;
+}
+
 const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({ battery }) => {
+  const navigate = useNavigate();
+
+  const handleClick = () => {
+    if (battery.id === 'backup-battery') {
+      navigate('/battery/backup');
+    }
+  };
+
   const getStatusColor = () => {
     if (battery.percentage > 70) return 'text-green-600';
     if (battery.percentage > 30) return 'text-yellow-600';
@@ -21,11 +34,28 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({ battery }) => {
     return '🔴';
   };
 
+  const getDataStatus = () => {
+    if (battery.isFresh === false) return '🔴 数据不新鲜';
+    return '🟢 数据正常';
+  };
+
+  const isClickable = battery.id === 'backup-battery';
+
   return (
-    <div className="bg-white/70 rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow duration-200">
+    <div 
+      className={`bg-white/70 rounded-lg p-4 shadow-md transition-all duration-200 ${
+        isClickable 
+          ? 'hover:shadow-lg hover:bg-white/80 cursor-pointer transform hover:scale-105' 
+          : 'hover:shadow-lg'
+      }`}
+      onClick={handleClick}
+    >
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-semibold text-gray-800">{battery.name}</h4>
-        <span className="text-lg">{getStatusIcon()}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-lg">{getStatusIcon()}</span>
+          {isClickable && <span className="text-xs text-blue-500">👆</span>}
+        </div>
       </div>
       
       <div className="mb-3">
@@ -47,17 +77,33 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({ battery }) => {
       <div className="space-y-1">
         <div className="flex justify-between text-xs">
           <span className="text-gray-600">电压:</span>
-          <span className="font-medium">{battery.voltage}V</span>
+          <span className="font-medium">{battery.voltage.toFixed(2)}V</span>
         </div>
         <div className="flex justify-between text-xs">
           <span className="text-gray-600">温度:</span>
           <span className="font-medium">{battery.temperature}°C</span>
         </div>
+        {battery.current !== undefined && (
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-600">电流:</span>
+            <span className="font-medium">{battery.current.toFixed(2)}A</span>
+          </div>
+        )}
+        {battery.power !== undefined && (
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-600">功率:</span>
+            <span className="font-medium">{battery.power.toFixed(2)}W</span>
+          </div>
+        )}
         <div className="flex justify-between text-xs">
           <span className="text-gray-600">状态:</span>
           <span className={`font-medium ${getStatusColor()}`}>
-            {battery.isCharging ? '充电中' : battery.status}
+            {battery.status}
           </span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-gray-600">数据:</span>
+          <span className="text-xs">{getDataStatus()}</span>
         </div>
       </div>
     </div>

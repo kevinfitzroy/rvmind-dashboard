@@ -9,9 +9,17 @@ export interface WaterTankData {
 export interface BatteryData {
   id: string;
   name: string;
-  level: number; // 0-100
+  percentage: number;
   voltage: number;
-  type: 'main' | 'backup';
+  temperature: number;
+  status: string;
+  isCharging: boolean;
+  current?: number;
+  power?: number;
+  cycleCount?: number;
+  cellVoltageDifference?: number;
+  temperatureDifference?: number;
+  isFresh?: boolean;
 }
 
 export interface ControlItem {

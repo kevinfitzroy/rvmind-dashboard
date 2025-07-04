@@ -2,7 +2,7 @@ import axios from 'axios';
 import io, { Socket } from 'socket.io-client';
 
 const api = axios.create({
-  baseURL: 'https://192.168.8.145:3000/v1',
+  baseURL: 'https://192.168.8.112:3000/v1',
   timeout: 5000,
   headers: {
     'Content-Type': 'application/json',
@@ -52,6 +52,90 @@ export interface StateChangeEvent {
   timestamp: number;
   changedRelayIndexes?: number[];
   changedInputIndexes?: number[];
+}
+
+// 电池数据类型定义
+export interface BatteryRealTimeData {
+  soc: number;
+  totalVoltage: number;
+  current: number;
+  power: number;
+  chargeDischargeStatus: number;
+  chargeDischargeStatusText: string;
+  maxCellTemperature: number;
+  minCellTemperature: number;
+  temperatureDifference: number;
+  cellVoltageDifference: number;
+  maxCellVoltage: number;
+  minCellVoltage: number;
+  remainingCapacity: number;
+  cycleCount: number;
+  timestamp: number;
+  updateTime: number;
+  isFresh: boolean;
+}
+
+// 电池详细数据类型定义
+export interface BatteryDetailedData {
+  latest: BatteryRealTimeData;
+  soc: {
+    soc: number;
+    remainingCapacity: number;
+    timestamp: number;
+  };
+  voltage: {
+    totalVoltage: number;
+    averageVoltage: number;
+    maxCellVoltage: number;
+    minCellVoltage: number;
+    cellVoltageDifference: number;
+    maxCellVoltageIndex: number;
+    minCellVoltageIndex: number;
+    timestamp: number;
+  };
+  current: {
+    current: number;
+    chargeDischargeStatus: number;
+    chargerStatus: number;
+    loadStatus: number;
+    heatingCurrent: number;
+    currentLimitingStatus: number;
+    currentLimitingCurrent: number;
+    timestamp: number;
+  };
+  power: {
+    power: number;
+    energy: number;
+    voltage: number;
+    current: number;
+    timestamp: number;
+  };
+  temperature: {
+    maxCellTemperature: number;
+    minCellTemperature: number;
+    temperatureDifference: number;
+    maxCellTemperatureIndex: number;
+    minCellTemperatureIndex: number;
+    mosTemperature: number;
+    ambientTemperature: number;
+    heatingTemperature: number;
+    batteryTemperatures: number[];
+    timestamp: number;
+  };
+  status: {
+    chargeDischargeStatus: number;
+    chargerStatus: number;
+    loadStatus: number;
+    balancingStatus: number;
+    chargeMosStatus: boolean;
+    dischargeMosStatus: boolean;
+    prechargeMosStatus: boolean;
+    heaterMosStatus: boolean;
+    fanMosStatus: boolean;
+    currentLimitingStatus: number;
+    cycleCount: number;
+    timestamp: number;
+  };
 }
 
 // 配置缓存管理类 - 用于缓存静态配置数据
@@ -439,9 +523,153 @@ class DeviceStatusCache {
   }
 }
 
+// 电池数据缓存管理类
+class BatteryDataCache {
+  private cache: {
+    data: BatteryRealTimeData | null;
+    lastUpdate: number;
+    isUpdating: boolean;
+  } = {
+    data: null,
+    lastUpdate: 0,
+    isUpdating: false
+  };
+
+  private updateInterval: NodeJS.Timeout | null = null;
+  private subscribers = new Set<() => void>();
+  private readonly CACHE_TTL = 8000; // 8秒缓存有效期
+  private readonly UPDATE_INTERVAL = 5000; // 5秒更新一次
+  private notifyTimeout: NodeJS.Timeout | null = null;
+  private isInitialized = false;
+
+  constructor() {
+    this.start();
+  }
+
+  private async start(): Promise<void> {
+    try {
+      console.log('Starting battery data monitoring...');
+      
+      // 立即获取一次电池数据
+      await this.refreshBatteryData();
+      this.isInitialized = true;
+      
+      // 开始周期性更新
+      this.startPeriodicUpdate();
+    } catch (error) {
+      console.error('Failed to start battery data monitoring:', error);
+    }
+  }
+
+  subscribe(callback: () => void): () => void {
+    this.subscribers.add(callback);
+    return () => this.subscribers.delete(callback);
+  }
+
+  private notifySubscribers() {
+    if (this.notifyTimeout) {
+      clearTimeout(this.notifyTimeout);
+    }
+    
+    this.notifyTimeout = setTimeout(() => {
+      this.subscribers.forEach(callback => {
+        try {
+          callback();
+        } catch (error) {
+          console.error('Error in battery data subscriber callback:', error);
+        }
+      });
+      this.notifyTimeout = null;
+    }, 100);
+  }
+
+  getBatteryData(): { data: BatteryRealTimeData | null; isStale: boolean } {
+    const isStale = Date.now() - this.cache.lastUpdate > this.CACHE_TTL;
+    return {
+      data: this.cache.data,
+      isStale
+    };
+  }
+
+  async refreshBatteryData(): Promise<void> {
+    if (this.cache.isUpdating) {
+      return;
+    }
+
+    this.cache.isUpdating = true;
+
+    try {
+      const data = await this.fetchBatteryData();
+      
+      // 检查数据是否有变化
+      const hasDataChange = JSON.stringify(this.cache.data) !== JSON.stringify(data);
+      
+      this.cache = {
+        data,
+        lastUpdate: Date.now(),
+        isUpdating: false
+      };
+
+      // 只在数据真正变化时通知
+      if (hasDataChange) {
+        console.log('Battery data updated:', {
+          soc: data?.soc,
+          voltage: data?.totalVoltage,
+          current: data?.current,
+          isFresh: data?.isFresh
+        });
+        this.notifySubscribers();
+      }
+    } catch (error) {
+      console.error('Failed to refresh battery data:', error);
+      this.cache.isUpdating = false;
+    }
+  }
+
+  private startPeriodicUpdate() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+    }
+
+    this.updateInterval = setInterval(() => {
+      this.refreshBatteryData();
+    }, this.UPDATE_INTERVAL);
+
+    console.log('Battery data periodic update started');
+  }
+
+  stopPeriodicUpdate() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+  }
+
+  private async fetchBatteryData(): Promise<BatteryRealTimeData> {
+    try {
+      const response = await api.get('/battery/summary');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching battery data:', error);
+      throw error;
+    }
+  }
+
+  isReady(): boolean {
+    return this.isInitialized;
+  }
+
+  // 强制刷新数据
+  async forceRefresh(): Promise<void> {
+    console.log('Force refreshing battery data');
+    await this.refreshBatteryData();
+  }
+}
+
 // 创建全局缓存实例
 export const configCache = new ConfigCache();
 export const deviceStatusCache = new DeviceStatusCache();
+export const batteryDataCache = new BatteryDataCache();
 
 // 修改的API函数 - 使用新的缓存架构
 export const getRooms = async (): Promise<{ rooms: RoomInfo[] }> => {
@@ -621,6 +849,170 @@ export const forceRefreshButtonDeviceStatus = (buttonId: string): void => {
   }
 };
 
+// 电池数据API函数
+export const getBatteryData = (): { data: BatteryRealTimeData | null; isStale: boolean } => {
+  return batteryDataCache.getBatteryData();
+};
+
+export const subscribeToBatteryDataChanges = (callback: () => void): (() => void) => {
+  return batteryDataCache.subscribe(callback);
+};
+
+export const isBatteryDataReady = (): boolean => {
+  return batteryDataCache.isReady();
+};
+
+export const refreshBatteryData = async (): Promise<void> => {
+  await batteryDataCache.forceRefresh();
+};
+
+// 电池详细数据API函数
+export const getBatteryLatestData = async (): Promise<{ data: any; updateTime: number; isFresh: boolean }> => {
+  try {
+    const response = await api.get('/battery/latest');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching battery latest data:', error);
+    throw error;
+  }
+};
+
+export const getBatterySocData = async (): Promise<{ soc: number; remainingCapacity: number; timestamp: number }> => {
+  try {
+    const response = await api.get('/battery/soc');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching battery SOC data:', error);
+    throw error;
+  }
+};
+
+export const getBatteryVoltageData = async (): Promise<{
+  totalVoltage: number;
+  averageVoltage: number;
+  maxCellVoltage: number;
+  minCellVoltage: number;
+  cellVoltageDifference: number;
+  maxCellVoltageIndex: number;
+  minCellVoltageIndex: number;
+  timestamp: number;
+}> => {
+  try {
+    const response = await api.get('/battery/voltage');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching battery voltage data:', error);
+    throw error;
+  }
+};
+
+export const getBatteryCurrentData = async (): Promise<{
+  current: number;
+  chargeDischargeStatus: number;
+  chargerStatus: number;
+  loadStatus: number;
+  heatingCurrent: number;
+  currentLimitingStatus: number;
+  currentLimitingCurrent: number;
+  timestamp: number;
+}> => {
+  try {
+    const response = await api.get('/battery/current');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching battery current data:', error);
+    throw error;
+  }
+};
+
+export const getBatteryPowerData = async (): Promise<{
+  power: number;
+  energy: number;
+  voltage: number;
+  current: number;
+  timestamp: number;
+}> => {
+  try {
+    const response = await api.get('/battery/power');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching battery power data:', error);
+    throw error;
+  }
+};
+
+export const getBatteryTemperatureData = async (): Promise<{
+  maxCellTemperature: number;
+  minCellTemperature: number;
+  temperatureDifference: number;
+  maxCellTemperatureIndex: number;
+  minCellTemperatureIndex: number;
+  mosTemperature: number;
+  ambientTemperature: number;
+  heatingTemperature: number;
+  batteryTemperatures: number[];
+  timestamp: number;
+}> => {
+  try {
+    const response = await api.get('/battery/temperature');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching battery temperature data:', error);
+    throw error;
+  }
+};
+
+export const getBatteryStatusData = async (): Promise<{
+  chargeDischargeStatus: number;
+  chargerStatus: number;
+  loadStatus: number;
+  balancingStatus: number;
+  chargeMosStatus: boolean;
+  dischargeMosStatus: boolean;
+  prechargeMosStatus: boolean;
+  heaterMosStatus: boolean;
+  fanMosStatus: boolean;
+  currentLimitingStatus: number;
+  cycleCount: number;
+  timestamp: number;
+}> => {
+  try {
+    const response = await api.get('/battery/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching battery status data:', error);
+    throw error;
+  }
+};
+
+// 获取所有电池详细数据
+export const getBatteryDetailedData = async (): Promise<BatteryDetailedData> => {
+  try {
+    const [latest, soc, voltage, current, power, temperature, status] = await Promise.all([
+      getBatteryLatestData(),
+      getBatterySocData(),
+      getBatteryVoltageData(),
+      getBatteryCurrentData(),
+      getBatteryPowerData(),
+      getBatteryTemperatureData(),
+      getBatteryStatusData()
+    ]);
+
+    return {
+      latest: latest.data,
+      soc,
+      voltage,
+      current,
+      power,
+      temperature,
+      status
+    };
+  } catch (error) {
+    console.error('Error fetching battery detailed data:', error);
+    throw error;
+  }
+};
+
 // WebSocket 客户端类
 export class RelayWebSocketClient {
   private socket: Socket | null = null;
@@ -731,5 +1123,6 @@ export default api;
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     deviceStatusCache.stopPeriodicUpdate();
+    batteryDataCache.stopPeriodicUpdate();
   });
 }
