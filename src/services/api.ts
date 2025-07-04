@@ -695,6 +695,18 @@ class BatteryDataCache {
   }
 }
 
+// 电池 AC 逆变器控制 API 类型定义
+export interface InverterStatus {
+  status: 'OPEN' | 'CLOSE';
+  timestamp: number;
+}
+
+export interface InverterControlResult {
+  success: boolean;
+  message?: string;
+  data?: any;
+}
+
 // 创建全局缓存实例
 export const configCache = new ConfigCache();
 export const deviceStatusCache = new DeviceStatusCache();
@@ -1038,6 +1050,88 @@ export const getBatteryDetailedData = async (): Promise<BatteryDetailedData> => 
     };
   } catch (error) {
     console.error('Error fetching battery detailed data:', error);
+    throw error;
+  }
+};
+
+// 电池 AC 逆变器控制 API 函数
+export const setMainPowerInverter = async (state: 'OPEN' | 'CLOSE'): Promise<InverterControlResult> => {
+  try {
+    const response = await api.post(`/battery/ac/main-power/${state}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error setting main power inverter:', error);
+    throw error;
+  }
+};
+
+export const setBackupBatteryChargeInverter = async (state: 'OPEN' | 'CLOSE'): Promise<InverterControlResult> => {
+  try {
+    const response = await api.post(`/battery/ac/backup-battery/${state}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error setting backup battery charge inverter:', error);
+    throw error;
+  }
+};
+
+export const getMainPowerInverterStatus = async (): Promise<InverterStatus> => {
+  try {
+    const response = await api.get('/battery/ac/main-power/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching main power inverter status:', error);
+    throw error;
+  }
+};
+
+export const getBackupBatteryChargeInverterStatus = async (): Promise<InverterStatus> => {
+  try {
+    const response = await api.get('/battery/ac/backup-battery/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching backup battery charge inverter status:', error);
+    throw error;
+  }
+};
+
+// 便捷方法：打开主供电逆变器
+export const openMainPowerInverter = async (): Promise<InverterControlResult> => {
+  return setMainPowerInverter('OPEN');
+};
+
+// 便捷方法：关闭主供电逆变器
+export const closeMainPowerInverter = async (): Promise<InverterControlResult> => {
+  return setMainPowerInverter('CLOSE');
+};
+
+// 便捷方法：打开备用电池充电逆变器
+export const openBackupBatteryChargeInverter = async (): Promise<InverterControlResult> => {
+  return setBackupBatteryChargeInverter('OPEN');
+};
+
+// 便捷方法：关闭备用电池充电逆变器
+export const closeBackupBatteryChargeInverter = async (): Promise<InverterControlResult> => {
+  return setBackupBatteryChargeInverter('CLOSE');
+};
+
+// 获取所有逆变器状态
+export const getAllInverterStatus = async (): Promise<{
+  mainPower: InverterStatus;
+  backupBattery: InverterStatus;
+}> => {
+  try {
+    const [mainPower, backupBattery] = await Promise.all([
+      getMainPowerInverterStatus(),
+      getBackupBatteryChargeInverterStatus()
+    ]);
+
+    return {
+      mainPower,
+      backupBattery
+    };
+  } catch (error) {
+    console.error('Error fetching all inverter status:', error);
     throw error;
   }
 };
