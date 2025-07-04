@@ -1,34 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Activity, AlertTriangle, CheckCircle, Clock, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-interface ModbusPortStatus {
-  port: string;
-  queueLength: number;
-  isProcessing: boolean;
-  lastRequestTime: number;
-  timeSinceLastRequest: number;
-  errorCount24h: number;
-  errorCount1m: number;
-  lastError?: {
-    timestamp: number;
-    error: string;
-  };
-  accessCount1m: number;
-  lastAccess?: {
-    timestamp: number;
-    deviceAddress: number;
-  };
-}
-
-interface ModbusStatus {
-  queues: ModbusPortStatus[];
-  totalQueuedRequests: number;
-  activeProcessingPorts: number;
-  totalErrors24h: number;
-  totalErrors1m: number;
-  totalAccesses1m: number;
-}
+import { getModbusStatus, ModbusStatus, ModbusPortStatus } from '../../services/api';
 
 const CommunicationStatus: React.FC = () => {
   const navigate = useNavigate();
@@ -38,11 +11,7 @@ const CommunicationStatus: React.FC = () => {
 
   const fetchStatus = async () => {
     try {
-      const response = await fetch('https://192.168.8.145:3000/modbus/status');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await getModbusStatus();
       setStatus(data);
       setError(null);
     } catch (err) {

@@ -1,8 +1,8 @@
 import axios from 'axios';
 import io, { Socket } from 'socket.io-client';
-
+const SERVER_ADDRESS = "https://192.168.8.112:3000"
 const api = axios.create({
-  baseURL: 'https://192.168.8.112:3000/v1',
+  baseURL: `${SERVER_ADDRESS}/v1`,
   timeout: 5000,
   headers: {
     'Content-Type': 'application/json',
@@ -138,6 +138,35 @@ export interface BatteryDetailedData {
   };
 }
 
+// Modbus 通信状态类型定义
+export interface ModbusPortStatus {
+  port: string;
+  queueLength: number;
+  isProcessing: boolean;
+  lastRequestTime: number;
+  timeSinceLastRequest: number;
+  errorCount24h: number;
+  errorCount1m: number;
+  lastError?: {
+    timestamp: number;
+    error: string;
+  };
+  accessCount1m: number;
+  lastAccess?: {
+    timestamp: number;
+    deviceAddress: number;
+  };
+}
+
+export interface ModbusStatus {
+  queues: ModbusPortStatus[];
+  totalQueuedRequests: number;
+  activeProcessingPorts: number;
+  totalErrors24h: number;
+  totalErrors1m: number;
+  totalAccesses1m: number;
+}
+
 // 配置缓存管理类 - 用于缓存静态配置数据
 class ConfigCache {
   private roomsCache: { rooms: RoomInfo[] } | null = null;
@@ -164,7 +193,7 @@ class ConfigCache {
 
         this.roomsCache = roomsResponse.data;
         this.devicesCache = devicesResponse.data;
-        
+
         console.log('Configuration data loaded:', {
           rooms: this.roomsCache?.rooms?.length || 0,
           devices: this.devicesCache?.length || 0
@@ -214,7 +243,7 @@ class DeviceStatusCache {
     lastUpdate: number;
     isUpdating: boolean;
   }>();
-  
+
   private updateInterval: NodeJS.Timeout | null = null;
   private subscribers = new Set<() => void>();
   private readonly CACHE_TTL = 10000; // 减少到10秒缓存有效期
@@ -240,13 +269,13 @@ class DeviceStatusCache {
       // 等待配置加载完成
       await configCache.loadConfigs();
       const devices = await configCache.getDevices();
-      
+
       if (devices.length > 0) {
         console.log('Starting device status monitoring for', devices.length, 'devices');
-        
+
         // 构建按钮ID到设备信息的映射
         this.buildButtonToDeviceMap(devices);
-        
+
         // 立即获取一次所有设备状态
         await this.refreshAllDevices();
         this.isInitialized = true;
@@ -282,7 +311,7 @@ class DeviceStatusCache {
     if (this.notifyTimeout) {
       clearTimeout(this.notifyTimeout);
     }
-    
+
     this.notifyTimeout = setTimeout(() => {
       this.subscribers.forEach(callback => {
         try {
@@ -330,10 +359,10 @@ class DeviceStatusCache {
 
     const isStale = Date.now() - cached.lastUpdate > this.CACHE_TTL;
     const relayState = cached.relayStates[mapping.relayIndex];
-    
-    return { 
-      state: relayState === 1, 
-      isStale 
+
+    return {
+      state: relayState === 1,
+      isStale
     };
   }
 
@@ -374,14 +403,14 @@ class DeviceStatusCache {
       if (devices.length === 0) return;
 
       console.log('Refreshing status for', devices.length, 'devices');
-      
+
       // 暂停通知
       const originalNotify = this.notifySubscribers;
-      this.notifySubscribers = () => {};
-      
+      this.notifySubscribers = () => { };
+
       const refreshPromises = devices.map(device => this.refreshDevice(device.id));
       await Promise.all(refreshPromises);
-      
+
       // 恢复通知并发送一次
       this.notifySubscribers = originalNotify;
       this.notifySubscribers();
@@ -423,13 +452,13 @@ class DeviceStatusCache {
     };
 
     const newEntry = { ...existing, ...updates };
-    
+
     // 检查是否有实际变化
     const hasOnlineChange = existing.isOnline !== newEntry.isOnline;
     const hasRelayChange = JSON.stringify(existing.relayStates) !== JSON.stringify(newEntry.relayStates);
-    
+
     this.cache.set(deviceId, newEntry);
-    
+
     // 只在状态真正变化时通知
     if ((hasOnlineChange || hasRelayChange) && !updates.isUpdating) {
       console.log(`Device ${deviceId} status changed:`, {
@@ -475,12 +504,12 @@ class DeviceStatusCache {
   // 新增：获取所有按钮状态
   getAllButtonStates(): Record<string, { state: boolean; isStale: boolean; deviceId: string; isOnline: boolean }> {
     const result: Record<string, any> = {};
-    
+
     this.buttonToDeviceMap.forEach((mapping, buttonId) => {
       const cached = this.cache.get(mapping.deviceId);
       const isStale = !cached || Date.now() - cached.lastUpdate > this.CACHE_TTL;
       const relayState = cached?.relayStates[mapping.relayIndex] || 0;
-      
+
       result[buttonId] = {
         state: relayState === 1,
         isStale,
@@ -488,7 +517,7 @@ class DeviceStatusCache {
         isOnline: cached?.isOnline || false
       };
     });
-    
+
     return result;
   }
 
@@ -499,7 +528,7 @@ class DeviceStatusCache {
   // 新增：立即刷新特定设备（用于按钮操作后）
   async forceRefreshDevice(deviceId: string): Promise<void> {
     console.log(`Force refreshing device ${deviceId}`);
-    
+
     try {
       const [onlineStatus, relayStates] = await Promise.all([
         this.fetchDeviceOnlineStatus(deviceId),
@@ -512,7 +541,7 @@ class DeviceStatusCache {
         lastUpdate: Date.now(),
         isUpdating: false
       });
-      
+
       console.log(`Force refresh completed for device ${deviceId}:`, {
         online: onlineStatus,
         relays: relayStates
@@ -530,10 +559,10 @@ class BatteryDataCache {
     lastUpdate: number;
     isUpdating: boolean;
   } = {
-    data: null,
-    lastUpdate: 0,
-    isUpdating: false
-  };
+      data: null,
+      lastUpdate: 0,
+      isUpdating: false
+    };
 
   private updateInterval: NodeJS.Timeout | null = null;
   private subscribers = new Set<() => void>();
@@ -549,11 +578,11 @@ class BatteryDataCache {
   private async start(): Promise<void> {
     try {
       console.log('Starting battery data monitoring...');
-      
+
       // 立即获取一次电池数据
       await this.refreshBatteryData();
       this.isInitialized = true;
-      
+
       // 开始周期性更新
       this.startPeriodicUpdate();
     } catch (error) {
@@ -570,7 +599,7 @@ class BatteryDataCache {
     if (this.notifyTimeout) {
       clearTimeout(this.notifyTimeout);
     }
-    
+
     this.notifyTimeout = setTimeout(() => {
       this.subscribers.forEach(callback => {
         try {
@@ -600,10 +629,10 @@ class BatteryDataCache {
 
     try {
       const data = await this.fetchBatteryData();
-      
+
       // 检查数据是否有变化
       const hasDataChange = JSON.stringify(this.cache.data) !== JSON.stringify(data);
-      
+
       this.cache = {
         data,
         lastUpdate: Date.now(),
@@ -692,7 +721,7 @@ export const getAllDevicesSync = (): DeviceConfig[] | null => {
 // 设备状态API
 export const getDeviceOnlineStatus = async (deviceId: string): Promise<{ success: boolean; deviceId: string; isOnline: boolean }> => {
   const cached = deviceStatusCache.getDeviceOnlineStatus(deviceId);
-  
+
   if (!cached.isStale) {
     return {
       success: true,
@@ -702,7 +731,7 @@ export const getDeviceOnlineStatus = async (deviceId: string): Promise<{ success
   }
 
   deviceStatusCache.refreshDevice(deviceId);
-  
+
   return {
     success: true,
     deviceId,
@@ -712,7 +741,7 @@ export const getDeviceOnlineStatus = async (deviceId: string): Promise<{ success
 
 export const getDeviceState = async (deviceId: string): Promise<number[]> => {
   const cached = deviceStatusCache.getDeviceRelayStates(deviceId);
-  
+
   if (!cached.isStale) {
     return cached.states;
   }
@@ -816,20 +845,20 @@ export const toggleButton = async (buttonId: string, state: boolean): Promise<vo
     } else {
       await turnButtonOff(buttonId);
     }
-    
+
     // 立即强制刷新设备状态（多次尝试确保获取最新状态）
     const buttonMapping = deviceStatusCache.getButtonMapping(buttonId);
     if (buttonMapping) {
       console.log(`Triggering immediate refresh for device ${buttonMapping.deviceId} after button toggle`);
-      
+
       // 立即刷新一次
       deviceStatusCache.forceRefreshDevice(buttonMapping.deviceId);
-      
+
       // 500ms后再刷新一次，确保状态同步
       setTimeout(() => {
         deviceStatusCache.forceRefreshDevice(buttonMapping.deviceId);
       }, 500);
-      
+
       // 1秒后再刷新一次
       setTimeout(() => {
         deviceStatusCache.forceRefreshDevice(buttonMapping.deviceId);
@@ -1013,6 +1042,18 @@ export const getBatteryDetailedData = async (): Promise<BatteryDetailedData> => 
   }
 };
 
+// Modbus 通信状态 API 函数
+export const getModbusStatus = async (): Promise<ModbusStatus> => {
+  try {
+    // 使用统一的基础URL和路径
+    const response = await api.get('/modbus/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching modbus status:', error);
+    throw error;
+  }
+};
+
 // WebSocket 客户端类
 export class RelayWebSocketClient {
   private socket: Socket | null = null;
@@ -1027,7 +1068,7 @@ export class RelayWebSocketClient {
     onDisconnect?: () => void;
   } = {};
 
-  connect(baseUrl: string = 'https://192.168.8.145:3000'): Promise<void> {
+  connect(baseUrl: string = SERVER_ADDRESS): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         this.socket = io(`${baseUrl}/relay`, {
