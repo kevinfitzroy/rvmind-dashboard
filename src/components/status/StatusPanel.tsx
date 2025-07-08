@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Power, PowerOff, Loader2, AlertTriangle } from 'lucide-react';
 import WaterTankIndicator from './WaterTankIndicator';
 import BatteryIndicator from './BatteryIndicator';
-import { waterTanks, batteries } from '../../constants/mockData';
+import { waterTanks } from '../../constants/mockData';
 import { BatteryData } from '../../types';
 import { 
   getBatteryData, 
@@ -16,10 +16,18 @@ import {
   InverterStatus,
   InverterControlResult
 } from '../../services/api';
+import { 
+  getPmsData,
+  subscribeToPmsDataChanges,
+  isPmsDataReady,
+  BMS_FaultLevel
+} from '../../services/batteryApi';
 
 const StatusPanel: React.FC = () => {
   const [backupBatteryData, setBackupBatteryData] = useState<BatteryData | null>(null);
+  const [mainBatteryData, setMainBatteryData] = useState<BatteryData | null>(null);
   const [isLoadingBackup, setIsLoadingBackup] = useState(true);
+  const [isLoadingMain, setIsLoadingMain] = useState(true);
   
   // 逆变器状态管理
   const [inverterStatus, setInverterStatus] = useState<{
@@ -162,15 +170,50 @@ const StatusPanel: React.FC = () => {
             )}
           </button>
         </div>
-        
-        {/* <div className="mt-2 text-xs text-gray-500">
-          {new Date(status.timestamp).toLocaleTimeString()}
-        </div> */}
       </div>
     );
   };
 
   useEffect(() => {
+    // 转换 PMS 数据为 main battery 格式
+    const convertMainBatteryData = () => {
+      const { status, isStale } = getPmsData();
+      
+      if (status && status.bms) {
+        const getFaultLevelText = (level: BMS_FaultLevel): string => {
+          switch (level) {
+            case BMS_FaultLevel.NO_FAULT: return '正常';
+            case BMS_FaultLevel.LEVEL_1: return '一级故障';
+            case BMS_FaultLevel.LEVEL_2: return '二级故障';
+            case BMS_FaultLevel.LEVEL_3: return '三级故障';
+            default: return '未知';
+          }
+        };
+
+        const batteryInfo: BatteryData = {
+          id: 'main-battery',
+          name: 'Main Battery',
+          percentage: status.bms.soc,
+          voltage: status.bms.voltage,
+          temperature: status.bms.temperature || 25, // 默认温度
+          status: getFaultLevelText(status.bms.faultLevel),
+          isCharging: status.bms.current > 0,
+          current: status.bms.current,
+          power: status.bms.voltage * status.bms.current,
+          cycleCount: 0, // PMS 数据中暂无此信息
+          cellVoltageDifference: 0, // PMS 数据中暂无此信息
+          temperatureDifference: 0, // PMS 数据中暂无此信息
+          isFresh: !isStale
+        };
+        
+        setMainBatteryData(batteryInfo);
+      }
+      
+      if (isPmsDataReady()) {
+        setIsLoadingMain(false);
+      }
+    };
+
     // 转换后端数据为 backup battery 格式
     const convertBackupBatteryData = () => {
       const { data, isStale } = getBatteryData();
@@ -201,11 +244,16 @@ const StatusPanel: React.FC = () => {
     };
 
     // 初始加载
+    convertMainBatteryData();
     convertBackupBatteryData();
     fetchInverterStatus();
 
     // 订阅数据变化
-    const unsubscribe = subscribeToBatteryDataChanges(() => {
+    const unsubscribePms = subscribeToPmsDataChanges(() => {
+      convertMainBatteryData();
+    });
+
+    const unsubscribeBattery = subscribeToBatteryDataChanges(() => {
       convertBackupBatteryData();
     });
 
@@ -213,16 +261,11 @@ const StatusPanel: React.FC = () => {
     const interval = setInterval(fetchInverterStatus, 2000);
 
     return () => {
-      unsubscribe();
+      unsubscribePms();
+      unsubscribeBattery();
       clearInterval(interval);
     };
   }, []);
-
-  // 合并电池数据：main 使用模拟数据，backup 使用实际数据
-  const allBatteries = [
-    ...batteries, // main battery 模拟数据
-    ...(backupBatteryData ? [backupBatteryData] : []) // backup battery 实际数据
-  ];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -313,10 +356,36 @@ const StatusPanel: React.FC = () => {
             <div className="flex flex-col">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">电池状态</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-                {/* Main Battery - 使用模拟数据 */}
-                {batteries.map(battery => (
-                  <BatteryIndicator key={battery.id} battery={battery} />
-                ))}
+                {/* Main Battery - 使用 PMS 真实数据 */}
+                {isLoadingMain ? (
+                  <div className="bg-white/70 rounded-lg p-4 shadow-md animate-pulse">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="h-4 bg-gray-200 rounded w-24"></div>
+                      <div className="h-6 bg-gray-200 rounded w-6"></div>
+                    </div>
+                    <div className="mb-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="h-3 bg-gray-200 rounded w-8"></div>
+                        <div className="h-4 bg-gray-200 rounded w-10"></div>
+                      </div>
+                      <div className="h-3 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-gray-200 rounded"></div>
+                      <div className="h-3 bg-gray-200 rounded"></div>
+                      <div className="h-3 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                ) : mainBatteryData ? (
+                  <BatteryIndicator battery={mainBatteryData} />
+                ) : (
+                  <div className="bg-white/70 rounded-lg p-4 shadow-md">
+                    <div className="text-center text-gray-500">
+                      <h4 className="text-sm font-semibold mb-2">Main Battery</h4>
+                      <p className="text-xs">暂无数据</p>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Backup Battery - 使用实际数据或显示加载状态 */}
                 {isLoadingBackup ? (

@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import RoomControl from './pages/controls/RoomControl';
 import CommunicationStatus from './components/communication/CommunicationStatus';
 import BatteryDetailPage from './pages/BatteryDetailPage';
+import MainBatteryDetailPage from './pages/MainBatteryDetailPage';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Route path="/controls/:roomId" element={<RoomControl />} />
           <Route path="/communication-status" element={<CommunicationStatus />} />
           <Route path="/battery/backup" element={<BatteryDetailPage />} />
+          <Route path="/battery/main" element={<MainBatteryDetailPage />} />
         </Routes>
       </Layout>
     </Router>

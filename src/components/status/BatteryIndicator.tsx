@@ -12,6 +12,8 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({ battery }) => {
   const handleClick = () => {
     if (battery.id === 'backup-battery') {
       navigate('/battery/backup');
+    } else if (battery.id === 'main-battery') {
+      navigate('/battery/main');
     }
   };
 
@@ -39,7 +41,7 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({ battery }) => {
     return '🟢 数据正常';
   };
 
-  const isClickable = battery.id === 'backup-battery';
+  const isClickable = battery.id === 'backup-battery' || battery.id === 'main-battery';
 
   return (
     <div 
