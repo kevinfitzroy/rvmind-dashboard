@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Power, PowerOff, Loader2, AlertTriangle } from 'lucide-react';
 import WaterTankIndicator from './WaterTankIndicator';
 import BatteryIndicator from './BatteryIndicator';
-import { waterTanks } from '../../constants/mockData';
 import { BatteryData } from '../../types';
 import { 
   getBatteryData, 
@@ -22,12 +21,19 @@ import {
   isPmsDataReady,
   BMS_FaultLevel
 } from '../../services/batteryApi';
+import {
+  getAllWaterTankData,
+  levelSensorManager,
+  blackWaterSensorManager,
+  WaterTankSensorData
+} from '../../services/sensor';
 
 const StatusPanel: React.FC = () => {
   const [backupBatteryData, setBackupBatteryData] = useState<BatteryData | null>(null);
   const [mainBatteryData, setMainBatteryData] = useState<BatteryData | null>(null);
   const [isLoadingBackup, setIsLoadingBackup] = useState(true);
   const [isLoadingMain, setIsLoadingMain] = useState(true);
+  const [waterTankData, setWaterTankData] = useState<WaterTankSensorData[]>([]);
   
   // 逆变器状态管理
   const [inverterStatus, setInverterStatus] = useState<{
@@ -260,10 +266,31 @@ const StatusPanel: React.FC = () => {
     // 每2秒更新逆变器状态
     const interval = setInterval(fetchInverterStatus, 2000);
 
+    // 水箱传感器数据更新
+    const updateWaterTankData = () => {
+      const tankData = getAllWaterTankData();
+      setWaterTankData(tankData);
+    };
+
+    // 启动传感器数据更新
+    levelSensorManager.startPeriodicUpdate(5000);
+    blackWaterSensorManager.startPeriodicUpdate(5000);
+
+    // 监听传感器数据变化
+    const unsubscribeFreshWater = levelSensorManager.addListener(updateWaterTankData);
+    const unsubscribeBlackWater = blackWaterSensorManager.addListener(updateWaterTankData);
+
+    // 初始更新
+    updateWaterTankData();
+
     return () => {
       unsubscribePms();
       unsubscribeBattery();
       clearInterval(interval);
+      levelSensorManager.stopPeriodicUpdate();
+      blackWaterSensorManager.stopPeriodicUpdate();
+      levelSensorManager.removeListener(updateWaterTankData);
+      blackWaterSensorManager.removeListener(updateWaterTankData);
     };
   }, []);
 
@@ -346,10 +373,28 @@ const StatusPanel: React.FC = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 h-full">
             <div className="flex flex-col">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">水箱状态</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 flex-1">
-                {waterTanks.map(tank => (
-                  <WaterTankIndicator key={tank.id} tank={tank} />
-                ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                {waterTankData.length > 0 ? (
+                  waterTankData.map(tank => (
+                    <WaterTankIndicator key={tank.id} tank={tank} />
+                  ))
+                ) : (
+                  // 加载状态
+                  [1, 2].map((i) => (
+                    <div key={i} className="bg-white/70 rounded-lg p-4 shadow-md animate-pulse">
+                      <div className="text-center mb-3">
+                        <div className="h-4 bg-gray-200 rounded w-16 mx-auto mb-1"></div>
+                        <div className="h-3 bg-gray-200 rounded w-12 mx-auto"></div>
+                      </div>
+                      <div className="h-24 bg-gray-200 rounded mb-3"></div>
+                      <div className="space-y-1">
+                        <div className="h-3 bg-gray-200 rounded w-20 mx-auto"></div>
+                        <div className="h-3 bg-gray-200 rounded w-16 mx-auto"></div>
+                        <div className="h-2 bg-gray-200 rounded w-14 mx-auto"></div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
             
