@@ -64,7 +64,7 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({ battery }) => {
         <div className="flex justify-between items-center mb-2">
           <span className="text-xs text-gray-600">电量</span>
           <span className={`text-sm font-bold ${getStatusColor()}`}>
-            {battery.percentage}%
+            {battery.percentage.toFixed(1)}%
           </span>
         </div>
         

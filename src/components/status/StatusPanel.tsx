@@ -198,12 +198,12 @@ const StatusPanel: React.FC = () => {
 
         const batteryInfo: BatteryData = {
           id: 'main-battery',
-          name: 'Main Battery',
+          name: '主电池',
           percentage: status.bms.soc,
           voltage: status.bms.voltage,
           temperature: status.bms.temperature || 25, // 默认温度
           status: getFaultLevelText(status.bms.faultLevel),
-          isCharging: status.bms.current > 0,
+          isCharging: status.bms.current < 0,
           current: status.bms.current,
           power: status.bms.voltage * status.bms.current,
           cycleCount: 0, // PMS 数据中暂无此信息
@@ -227,7 +227,7 @@ const StatusPanel: React.FC = () => {
       if (data) {
         const batteryInfo: BatteryData = {
           id: 'backup-battery',
-          name: 'Backup Battery',
+          name: '备用电池',
           percentage: data.soc,
           voltage: data.totalVoltage,
           temperature: data.maxCellTemperature,
