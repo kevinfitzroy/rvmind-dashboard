@@ -43,5 +43,18 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, '../public'), // 指定输出目录到 NestJS 工程
     emptyOutDir: true, // 构建时清空输出目录
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+      },
+      output: {
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name === 'manifest.json') {
+            return 'manifest.json';
+          }
+          return 'assets/[name]-[hash][extname]';
+        }
+      }
+    }
   },
 });

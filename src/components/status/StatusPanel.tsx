@@ -46,6 +46,16 @@ const StatusPanel: React.FC = () => {
   });
   const [error, setError] = useState<string | null>(null);
 
+  // 添加新的状态管理
+  const [obcCharging, setObcCharging] = useState({
+    enabled: false,
+    loading: false
+  });
+  const [ventilation, setVentilation] = useState({
+    enabled: false,
+    loading: false
+  });
+
   // 获取逆变器状态
   const fetchInverterStatus = async () => {
     try {
@@ -111,6 +121,46 @@ const StatusPanel: React.FC = () => {
       setError('备用电池充电逆变器控制失败');
     } finally {
       setLoading(prev => ({ ...prev, backupBattery: false }));
+    }
+  };
+
+  // 控制OBC充电
+  const handleObcChargingToggle = async () => {
+    if (obcCharging.loading) return;
+    
+    setObcCharging(prev => ({ ...prev, loading: true }));
+    try {
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setObcCharging(prev => ({ 
+        enabled: !prev.enabled, 
+        loading: false 
+      }));
+    } catch (err) {
+      console.error('Failed to control OBC charging:', err);
+      setError('OBC充电控制失败');
+    } finally {
+      setObcCharging(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // 控制设备舱通风
+  const handleVentilationToggle = async () => {
+    if (ventilation.loading) return;
+    
+    setVentilation(prev => ({ ...prev, loading: true }));
+    try {
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setVentilation(prev => ({ 
+        enabled: !prev.enabled, 
+        loading: false 
+      }));
+    } catch (err) {
+      console.error('Failed to control ventilation:', err);
+      setError('设备舱通风控制失败');
+    } finally {
+      setVentilation(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -180,6 +230,71 @@ const StatusPanel: React.FC = () => {
     );
   };
 
+  // 通用控制按钮组件
+  const ControlButton: React.FC<{
+    title: string;
+    enabled: boolean;
+    loading: boolean;
+    onToggle: () => void;
+  }> = ({ title, enabled, loading, onToggle }) => {
+    const buttonColor = enabled 
+      ? 'bg-red-500 hover:bg-red-600' 
+      : 'bg-green-500 hover:bg-green-600';
+    const statusColor = enabled ? 'text-green-600' : 'text-red-600';
+    
+    return (
+      <div className="bg-white/80 rounded-lg p-3 shadow-md border border-white/50">
+        <div className="flex items-center justify-between mb-2">
+          <h5 className="text-xs font-semibold text-gray-800">{title}</h5>
+          <div className={`text-xs font-medium ${statusColor}`}>
+            {enabled ? '开启' : '关闭'}
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            {enabled ? (
+              <Power className="w-3 h-3 text-green-600" />
+            ) : (
+              <PowerOff className="w-3 h-3 text-red-600" />
+            )}
+            <span className="text-xs text-gray-600">
+              {enabled ? '运行中' : '已停止'}
+            </span>
+          </div>
+          
+          <button
+            onClick={onToggle}
+            disabled={loading}
+            className={`
+              flex items-center space-x-1 px-2 py-1 rounded text-white text-xs font-medium
+              transition-colors duration-200
+              ${buttonColor}
+              ${loading ? 'opacity-50 cursor-not-allowed' : ''}
+            `}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>处理中</span>
+              </>
+            ) : enabled ? (
+              <>
+                <PowerOff className="w-3 h-3" />
+                <span>关闭</span>
+              </>
+            ) : (
+              <>
+                <Power className="w-3 h-3" />
+                <span>开启</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   useEffect(() => {
     // 转换 PMS 数据为 main battery 格式
     const convertMainBatteryData = () => {
@@ -232,9 +347,9 @@ const StatusPanel: React.FC = () => {
           voltage: data.totalVoltage,
           temperature: data.maxCellTemperature,
           status: data.chargeDischargeStatusText,
-          isCharging: data.chargeDischargeStatus === 1,
+          isCharging: data.current < 0,//data.chargeDischargeStatus === 1,
           current: data.current,
-          power: data.power,
+          power: data.current * data.totalVoltage,
           cycleCount: data.cycleCount,
           cellVoltageDifference: data.cellVoltageDifference,
           temperatureDifference: data.temperatureDifference,
@@ -296,111 +411,99 @@ const StatusPanel: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      {/* 逆变器控制面板 - 替换原 WeatherCard 位置 */}
-      <div className="lg:col-span-1">
+      {/* 电力系统控制面板 - 逆变器控制 + 电池状态 */}
+      <div className="lg:col-span-3">
         <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg shadow-lg p-6 border border-blue-200 h-full">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">逆变器控制</h3>
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-          </div>
-          
-          {/* 错误提示 */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center">
-                <AlertTriangle className="w-4 h-4 text-red-600 mr-2" />
-                <span className="text-red-800 text-xs">{error}</span>
-                <button 
-                  onClick={() => setError(null)}
-                  className="ml-auto text-red-600 hover:text-red-800"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {/* 逆变器控制 */}
-          <div className="space-y-4">
-            {inverterStatus ? (
-              <>
-                <InverterControl
-                  title="主供电逆变器"
-                  status={inverterStatus.mainPower}
-                  loading={loading.mainPower}
-                  onToggle={handleMainPowerToggle}
-                />
-                <InverterControl
-                  title="备用电池充电逆变器"
-                  status={inverterStatus.backupBattery}
-                  loading={loading.backupBattery}
-                  onToggle={handleBackupBatteryToggle}
-                />
-              </>
-            ) : (
-              <div className="space-y-4">
-                {[1, 2].map((i) => (
-                  <div key={i} className="bg-white/80 rounded-lg p-4 shadow-md animate-pulse">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="h-4 bg-gray-200 rounded w-20"></div>
+          <div className="flex flex-col h-full space-y-6">
+            {/* 逆变器控制 - 进一步缩小宽度的上半部分 */}
+            <div className="max-w-[100%]">
+              {/* 错误提示 */}
+              {error && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center">
+                    <AlertTriangle className="w-3 h-3 text-red-600 mr-2" />
+                    <span className="text-red-800 text-xs">{error}</span>
+                    <button 
+                      onClick={() => setError(null)}
+                      className="ml-auto text-red-600 hover:text-red-800"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* 控制按钮 - 2x2 网格布局 */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* 主供电逆变器 */}
+                {inverterStatus ? (
+                  <ControlButton
+                    title="AC220V主供电"
+                    enabled={inverterStatus.mainPower.status === 'OPEN'}
+                    loading={loading.mainPower}
+                    onToggle={handleMainPowerToggle}
+                  />
+                ) : (
+                  <div className="bg-white/80 rounded-lg p-3 shadow-md animate-pulse">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="h-3 bg-gray-200 rounded w-20"></div>
                       <div className="h-3 bg-gray-200 rounded w-8"></div>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 bg-gray-200 rounded"></div>
+                        <div className="w-3 h-3 bg-gray-200 rounded"></div>
                         <div className="h-3 bg-gray-200 rounded w-12"></div>
                       </div>
-                      <div className="h-6 bg-gray-200 rounded w-12"></div>
+                      <div className="h-5 bg-gray-200 rounded w-12"></div>
                     </div>
-                    <div className="mt-2 h-3 bg-gray-200 rounded w-16"></div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          <div className="mt-4 text-center">
-            <div className="text-xs text-gray-600">
-              状态监控中
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* 右侧面板 - 水箱和电池状态 */}
-      <div className="lg:col-span-3">
-        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg shadow-lg p-6 border border-blue-100 h-full">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 h-full">
-            <div className="flex flex-col">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">水箱状态</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-                {waterTankData.length > 0 ? (
-                  waterTankData.map(tank => (
-                    <WaterTankIndicator key={tank.id} tank={tank} />
-                  ))
-                ) : (
-                  // 加载状态
-                  [1, 2].map((i) => (
-                    <div key={i} className="bg-white/70 rounded-lg p-4 shadow-md animate-pulse">
-                      <div className="text-center mb-3">
-                        <div className="h-4 bg-gray-200 rounded w-16 mx-auto mb-1"></div>
-                        <div className="h-3 bg-gray-200 rounded w-12 mx-auto"></div>
-                      </div>
-                      <div className="h-24 bg-gray-200 rounded mb-3"></div>
-                      <div className="space-y-1">
-                        <div className="h-3 bg-gray-200 rounded w-20 mx-auto"></div>
-                        <div className="h-3 bg-gray-200 rounded w-16 mx-auto"></div>
-                        <div className="h-2 bg-gray-200 rounded w-14 mx-auto"></div>
-                      </div>
-                    </div>
-                  ))
                 )}
+                
+                {/* 备用电池充电逆变器 */}
+                {inverterStatus ? (
+                  <ControlButton
+                    title="备用电池充电"
+                    enabled={inverterStatus.backupBattery.status === 'OPEN'}
+                    loading={loading.backupBattery}
+                    onToggle={handleBackupBatteryToggle}
+                  />
+                ) : (
+                  <div className="bg-white/80 rounded-lg p-3 shadow-md animate-pulse">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="h-3 bg-gray-200 rounded w-20"></div>
+                      <div className="h-3 bg-gray-200 rounded w-8"></div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 bg-gray-200 rounded"></div>
+                        <div className="h-3 bg-gray-200 rounded w-12"></div>
+                      </div>
+                      <div className="h-5 bg-gray-200 rounded w-12"></div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* 允许OBC充电 */}
+                <ControlButton
+                  title="允许OBC充电"
+                  enabled={obcCharging.enabled}
+                  loading={obcCharging.loading}
+                  onToggle={handleObcChargingToggle}
+                />
+                
+                {/* 打开设备舱通风 */}
+                <ControlButton
+                  title="打开设备舱通风"
+                  enabled={ventilation.enabled}
+                  loading={ventilation.loading}
+                  onToggle={handleVentilationToggle}
+                />
               </div>
             </div>
             
-            <div className="flex flex-col">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">电池状态</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+            {/* 电池状态 - 下半部分占用更多空间 */}
+            <div className="flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
                 {/* Main Battery - 使用 PMS 真实数据 */}
                 {isLoadingMain ? (
                   <div className="bg-white/70 rounded-lg p-4 shadow-md animate-pulse">
@@ -464,6 +567,44 @@ const StatusPanel: React.FC = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* 水箱状态 - 右侧独立区域，更窄 */}
+      <div className="lg:col-span-1">
+        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg shadow-lg p-6 border border-blue-100 h-full">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-800">水箱状态</h3>
+            <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
+          </div>
+          
+          <div className="space-y-6">
+            {waterTankData.length > 0 ? (
+              waterTankData.map(tank => (
+                <WaterTankIndicator key={tank.id} tank={tank} />
+              ))
+            ) : (
+              // 加载状态
+              [1, 2].map((i) => (
+                <div key={i} className="bg-white/70 rounded-lg p-4 shadow-md animate-pulse max-w-[200px] mx-auto">
+                  <div className="text-center mb-3">
+                    <div className="h-3 bg-gray-200 rounded w-12 mx-auto mb-1"></div>
+                    <div className="h-2 bg-gray-200 rounded w-8 mx-auto"></div>
+                  </div>
+                  <div className="h-16 bg-gray-200 rounded mb-3"></div>
+                  <div className="space-y-2">
+                    <div className="h-2 bg-gray-200 rounded w-16 mx-auto"></div>
+                    <div className="h-2 bg-gray-200 rounded w-12 mx-auto"></div>
+                    <div className="h-2 bg-gray-200 rounded w-10 mx-auto"></div>
+                  </div>
+                  <div className="border-t border-gray-200 pt-2 mt-3">
+                    <div className="h-2 bg-gray-200 rounded w-8 mx-auto mb-2"></div>
+                    <div className="h-6 bg-gray-200 rounded"></div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
