@@ -1128,6 +1128,23 @@ export const getAllInverterStatus = async (): Promise<{
   }
 };
 
+// 系统管理 API 函数
+export interface SystemHealth {
+  success: boolean;
+  uptime: number;
+  timestamp: number;
+}
+
+export const getSystemHealth = async (): Promise<SystemHealth> => {
+  const response = await api.get<SystemHealth>('/system/health', { timeout: 3000 });
+  return response.data;
+};
+
+export const restartServer = async (): Promise<{ success: boolean; message: string; delayMs: number }> => {
+  const response = await api.post('/system/restart');
+  return response.data;
+};
+
 // Modbus 通信状态 API 函数
 export const getModbusStatus = async (): Promise<ModbusStatus> => {
   try {

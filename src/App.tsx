@@ -7,6 +7,7 @@ import CommunicationStatus from './components/communication/CommunicationStatus'
 import BatteryDetailPage from './pages/BatteryDetailPage';
 import MainBatteryDetailPage from './pages/MainBatteryDetailPage';
 import DieselHeaterPage from './pages/DieselHeaterPage';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/battery/backup" element={<BatteryDetailPage />} />
           <Route path="/battery/main" element={<MainBatteryDetailPage />} />
           <Route path="/diesel-heater" element={<DieselHeaterPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Layout>
     </Router>

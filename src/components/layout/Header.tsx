@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, Radio, Home, Thermometer } from 'lucide-react';
+import { Menu, X, Radio, Home, Thermometer, Settings as SettingsIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Header: React.FC = () => {
@@ -46,12 +46,14 @@ const Header: React.FC = () => {
               <span className="text-sm font-medium">柴油加热器</span>
             </button>
             
-            <nav>
-              <ul className="flex space-x-4">
-                <li><a href="#" className="hover:text-blue-200 transition-colors">Settings</a></li>
-                <li><a href="#" className="hover:text-blue-200 transition-colors">Help</a></li>
-              </ul>
-            </nav>
+            <button
+              onClick={() => navigate('/settings')}
+              className="flex items-center space-x-2 px-3 py-2 rounded-full hover:bg-blue-700 transition-colors"
+              aria-label="Settings"
+            >
+              <SettingsIcon className="w-5 h-5" />
+              <span className="text-sm font-medium">设置</span>
+            </button>
           </div>
           
           <div className="md:hidden flex items-center">
@@ -93,8 +95,13 @@ const Header: React.FC = () => {
               <Thermometer className="w-5 h-5" />
               <span>柴油加热器</span>
             </button>
-            <a href="#" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-blue-700 hover:text-white">Settings</a>
-            <a href="#" className="block px-3 py-2 rounded-md text-base font-medium hover:bg-blue-700 hover:text-white">Help</a>
+            <button
+              onClick={() => {navigate('/settings'); setIsMenuOpen(false);}}
+              className="flex items-center space-x-2 w-full text-left px-3 py-2 rounded-md text-base font-medium hover:bg-blue-700 hover:text-white"
+            >
+              <SettingsIcon className="w-5 h-5" />
+              <span>设置</span>
+            </button>
           </div>
         </div>
       )}
