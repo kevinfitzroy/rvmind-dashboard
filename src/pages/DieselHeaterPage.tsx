@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Thermometer, Power, Settings, Activity, AlertTriangle, Wifi, WifiOff, Droplets, Wind, Flame, Sliders, Check } from 'lucide-react';
+import { Thermometer, Power, Settings, Activity, AlertTriangle, Wifi, WifiOff, Droplets, Wind, Flame, Sliders, Check, RefreshCw } from 'lucide-react';
 import {
   dieselHeaterManager,
   DetailedStatus,
   ThermostatState,
+  ReplenishState,
   addDieselHeaterListener,
   removeDieselHeaterListener,
   startHeaterWithHeating,
@@ -13,7 +14,8 @@ import {
   connectHeaterPort,
   disconnectHeaterPort,
   setTargetTemperature,
-  setThermostatLowRatio
+  setThermostatLowRatio,
+  setReplenishCycleEnabled,
 } from '../services/dieselHeaterApi';
 
 // 温控状态 → 用户可见的运行态（用于按钮禁用/状态显示）
@@ -23,6 +25,19 @@ const thermostatLabel: Record<ThermostatState, { text: string; color: string }> 
   running:  { text: '加热中',         color: 'text-green-600' },
   stopping: { text: '停机中',         color: 'text-orange-600' },
   paused:   { text: '温控暂停',       color: 'text-blue-600' },
+};
+
+const replenishLabel: Record<ReplenishState, { text: string; tone: string }> = {
+  disabled:     { text: '未运行',   tone: 'gray' },
+  replenishing: { text: '补水中',   tone: 'blue' },
+  dry:          { text: '干运行',   tone: 'amber' },
+};
+
+const formatMSS = (ms: number) => {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
 // 预设温度模式：一键应用 target + ratio
@@ -98,6 +113,8 @@ const DieselHeaterPage: React.FC = () => {
   const [tempInputValue, setTempInputValue] = useState<string>('22');
   // 重启阈值占目标温度的百分比，默认 60%
   const [ratioInputValue, setRatioInputValue] = useState<string>('60');
+  // 1Hz tick，用于驱动补水循环倒计时刷新（不依赖 status 推送频率）
+  const [now, setNow] = useState<number>(Date.now());
 
   useEffect(() => {
     // 启动定时更新
@@ -113,9 +130,13 @@ const DieselHeaterPage: React.FC = () => {
     // 立即获取一次状态
     dieselHeaterManager.fetchDetailedStatus();
     
+    // 倒计时驱动 - 每秒触发一次重渲染
+    const tickId = setInterval(() => setNow(Date.now()), 1000);
+
     return () => {
       removeDieselHeaterListener(statusListener);
       dieselHeaterManager.stopPeriodicUpdate();
+      clearInterval(tickId);
     };
   }, []);
 
@@ -200,6 +221,29 @@ const DieselHeaterPage: React.FC = () => {
     currentTarget !== undefined && currentRatio !== undefined
       ? matchPreset(currentTarget, currentRatio)
       : undefined;
+
+  // 补水循环派生量
+  const replenishCycleEnabled =
+    status?.controlState?.replenishCycleEnabled ?? true;
+  const replenishState: ReplenishState =
+    status?.controlState?.replenishState ?? 'disabled';
+  const replenishStartedAt = status?.controlState?.replenishStateStartedAt ?? 0;
+  const replenishDuration = status?.controlState?.replenishStateDurationMs ?? 0;
+  const replenishElapsed =
+    replenishStartedAt > 0 ? Math.max(0, now - replenishStartedAt) : 0;
+  const replenishRemaining = Math.max(0, replenishDuration - replenishElapsed);
+  const replenishProgress =
+    replenishDuration > 0
+      ? Math.min(100, (replenishElapsed / replenishDuration) * 100)
+      : 0;
+  const replenishCfg = status?.controlState?.replenishConfig;
+
+  const handleToggleReplenishCycle = async () => {
+    await handleOperation(
+      () => setReplenishCycleEnabled(!replenishCycleEnabled),
+      '切换补水循环开关',
+    );
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -356,6 +400,113 @@ const DieselHeaterPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* 补水循环卡片 */}
+        <div
+          className={`mb-6 p-5 rounded-xl border-2 transition-colors ${
+            !replenishCycleEnabled
+              ? 'bg-gray-50 border-gray-200'
+              : replenishState === 'replenishing'
+              ? 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-300'
+              : replenishState === 'dry'
+              ? 'bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200'
+              : 'bg-gray-50 border-gray-200'
+          }`}
+        >
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center">
+                <RefreshCw className={`w-5 h-5 mr-2 ${
+                  replenishState === 'replenishing'
+                    ? 'text-blue-500 animate-spin'
+                    : replenishState === 'dry'
+                    ? 'text-amber-500'
+                    : 'text-gray-400'
+                }`} />
+                补水循环
+                <span
+                  className={`ml-3 px-2 py-0.5 text-xs rounded-full font-medium ${
+                    !replenishCycleEnabled
+                      ? 'bg-gray-200 text-gray-600'
+                      : replenishState === 'replenishing'
+                      ? 'bg-blue-500 text-white'
+                      : replenishState === 'dry'
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-gray-300 text-gray-700'
+                  }`}
+                >
+                  {!replenishCycleEnabled ? '已禁用' : replenishLabel[replenishState].text}
+                </span>
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                定时接通发动机大循环阀门给加热器补水。接通时温度会瞬间下降（实测 90→50°C / 10s），属正常现象。
+              </p>
+            </div>
+            {/* 开关 */}
+            <button
+              onClick={handleToggleReplenishCycle}
+              disabled={isLoading}
+              className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                replenishCycleEnabled ? 'bg-blue-500' : 'bg-gray-300'
+              }`}
+              aria-label="切换补水循环"
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                  replenishCycleEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* 倒计时 + 进度条（仅在循环活动中显示） */}
+          {replenishCycleEnabled && replenishState !== 'disabled' && (
+            <>
+              <div className="flex items-baseline justify-between mb-2">
+                <div className="text-sm text-gray-600">
+                  {replenishState === 'replenishing'
+                    ? '补水中，剩余时间：'
+                    : '下次补水还有：'}
+                </div>
+                <div className="font-mono text-2xl font-bold text-gray-800 tabular-nums">
+                  {formatMSS(replenishRemaining)}
+                </div>
+              </div>
+              <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all ${
+                    replenishState === 'replenishing'
+                      ? 'bg-blue-500'
+                      : 'bg-amber-400'
+                  }`}
+                  style={{ width: `${replenishProgress}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] text-gray-500 mt-1">
+                <span>已经过 {formatMSS(replenishElapsed)}</span>
+                <span>
+                  本阶段共 {formatMSS(replenishDuration)}
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* 未启用 / disabled 状态时的提示 */}
+          {(!replenishCycleEnabled || replenishState === 'disabled') && (
+            <div className="text-xs text-gray-500 bg-white/60 p-3 rounded">
+              {!replenishCycleEnabled
+                ? '补水循环已关闭。需要时请手动控制"接入发动机冷却液"开关，或重新打开此功能。'
+                : '加热器未启动 / 已停止，循环不在运行。下次启动加热器时会自动从补水开始。'}
+            </div>
+          )}
+
+          {/* 配置参数（小字注脚） */}
+          {replenishCfg && (
+            <div className="text-[11px] text-gray-400 mt-2">
+              参数：补水 {Math.round(replenishCfg.replenishDurationMs / 1000)}s · 干运行 {Math.round(replenishCfg.dryDurationMs / 60000)}分钟
+            </div>
+          )}
         </div>
 
         {/* 状态信息展示 */}

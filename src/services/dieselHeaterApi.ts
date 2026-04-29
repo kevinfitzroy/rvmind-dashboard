@@ -22,6 +22,9 @@ export interface DieselHeaterStatus {
 // 温控状态机（后端通过启停实现真正的温度控制，因为设备硬件不支持温度调节）
 export type ThermostatState = 'idle' | 'starting' | 'running' | 'stopping' | 'paused';
 
+// 补水循环状态机（接通/断开发动机冷却液大循环阀，定时给加热器小循环补水）
+export type ReplenishState = 'disabled' | 'replenishing' | 'dry';
+
 // 控制状态接口
 export interface ControlState {
   on: boolean;
@@ -32,6 +35,14 @@ export interface ControlState {
   thermostatState: ThermostatState;
   thermostatLowRatio: number;
   thermostatLowThreshold: number;
+  replenishCycleEnabled: boolean;
+  replenishState: ReplenishState;
+  replenishStateStartedAt: number; // ms epoch，0 表示尚未进入循环
+  replenishStateDurationMs: number; // 当前状态预定持续时间，0 表示 disabled
+  replenishConfig: {
+    dryDurationMs: number;
+    replenishDurationMs: number;
+  };
 }
 
 // 详细状态接口
@@ -177,6 +188,20 @@ export class DieselHeaterManager {
       return response.data;
     } catch (error) {
       console.error('设置目标温度失败:', error);
+      throw error;
+    }
+  }
+
+  // 开关补水循环（关闭时不会自动操作大小循环电磁阀）
+  async setReplenishCycleEnabled(enabled: boolean): Promise<ApiResponse | null> {
+    try {
+      const response = await api.put<ApiResponse>('/diesel-heater/replenish-cycle', { enabled });
+      if (response.data.success) {
+        await this.fetchDetailedStatus();
+      }
+      return response.data;
+    } catch (error) {
+      console.error('设置补水循环开关失败:', error);
       throw error;
     }
   }
@@ -411,6 +436,7 @@ export const connectHeaterPort = () => dieselHeaterManager.connectSecondPort();
 export const disconnectHeaterPort = () => dieselHeaterManager.disconnectSecondPort();
 export const setTargetTemperature = (temperature: number) => dieselHeaterManager.setTargetTemperature(temperature);
 export const setThermostatLowRatio = (ratio: number) => dieselHeaterManager.setThermostatLowRatio(ratio);
+export const setReplenishCycleEnabled = (enabled: boolean) => dieselHeaterManager.setReplenishCycleEnabled(enabled);
 
 // 便捷函数 - 监听器管理
 export const addDieselHeaterListener = (callback: (status: DetailedStatus | null) => void) => {
