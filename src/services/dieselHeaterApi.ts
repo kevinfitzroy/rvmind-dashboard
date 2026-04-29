@@ -19,12 +19,19 @@ export interface DieselHeaterStatus {
   lastUpdateTime: string;
 }
 
+// 温控状态机（后端通过启停实现真正的温度控制，因为设备硬件不支持温度调节）
+export type ThermostatState = 'idle' | 'starting' | 'running' | 'stopping' | 'paused';
+
 // 控制状态接口
 export interface ControlState {
   on: boolean;
   heating: boolean;
   hasActiveControl: boolean;
   targetTemperature: number;
+  thermostatEnabled: boolean;
+  thermostatState: ThermostatState;
+  thermostatLowRatio: number;
+  thermostatLowThreshold: number;
 }
 
 // 详细状态接口
@@ -161,15 +168,31 @@ export class DieselHeaterManager {
   async setTargetTemperature(temperature: number): Promise<ApiResponse | null> {
     try {
       const response = await api.put<ApiResponse>('/diesel-heater/temperature', { temperature });
-      
+
       if (response.data.success) {
         // 操作成功后立即更新状态
         await this.fetchDetailedStatus();
       }
-      
+
       return response.data;
     } catch (error) {
       console.error('设置目标温度失败:', error);
+      throw error;
+    }
+  }
+
+  // 设置温控重启阈值比例 (0~1)：温度跌至 targetTemperature × ratio 以下时重启加热
+  async setThermostatLowRatio(ratio: number): Promise<ApiResponse | null> {
+    try {
+      const response = await api.put<ApiResponse>('/diesel-heater/thermostat-ratio', { ratio });
+
+      if (response.data.success) {
+        await this.fetchDetailedStatus();
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('设置重启阈值比例失败:', error);
       throw error;
     }
   }
@@ -387,6 +410,7 @@ export const toggleHeating = () => dieselHeaterManager.toggleHeating();
 export const connectHeaterPort = () => dieselHeaterManager.connectSecondPort();
 export const disconnectHeaterPort = () => dieselHeaterManager.disconnectSecondPort();
 export const setTargetTemperature = (temperature: number) => dieselHeaterManager.setTargetTemperature(temperature);
+export const setThermostatLowRatio = (ratio: number) => dieselHeaterManager.setThermostatLowRatio(ratio);
 
 // 便捷函数 - 监听器管理
 export const addDieselHeaterListener = (callback: (status: DetailedStatus | null) => void) => {
