@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, Radio, Home, Thermometer, Settings as SettingsIcon } from 'lucide-react';
+import { Menu, X, Radio, Home, Lightbulb, Wind, Settings as SettingsIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Header: React.FC = () => {
@@ -37,15 +37,24 @@ const Header: React.FC = () => {
               <span className="text-sm font-medium">Modbus</span>
             </button>
 
-            <button 
-              onClick={() => navigate('/diesel-heater')}
+            <button
+              onClick={() => navigate('/lighting')}
               className="flex items-center space-x-2 px-3 py-2 rounded-full hover:bg-blue-700 transition-colors"
-              aria-label="Diesel Heater"
+              aria-label="Lighting"
             >
-              <Thermometer className="w-5 h-5" />
-              <span className="text-sm font-medium">柴油加热器</span>
+              <Lightbulb className="w-5 h-5" />
+              <span className="text-sm font-medium">灯光</span>
             </button>
-            
+
+            <button
+              onClick={() => navigate('/thermal-center')}
+              className="flex items-center space-x-2 px-3 py-2 rounded-full hover:bg-blue-700 transition-colors"
+              aria-label="Thermal Center"
+            >
+              <Wind className="w-5 h-5" />
+              <span className="text-sm font-medium">热控中心</span>
+            </button>
+
             <button
               onClick={() => navigate('/settings')}
               className="flex items-center space-x-2 px-3 py-2 rounded-full hover:bg-blue-700 transition-colors"
@@ -88,12 +97,19 @@ const Header: React.FC = () => {
               <Home className="w-5 h-5" />
               <span>Dashboard</span>
             </button>
-            <button 
-              onClick={() => {navigate('/diesel-heater'); setIsMenuOpen(false);}}
+            <button
+              onClick={() => {navigate('/lighting'); setIsMenuOpen(false);}}
               className="flex items-center space-x-2 w-full text-left px-3 py-2 rounded-md text-base font-medium hover:bg-blue-700 hover:text-white"
             >
-              <Thermometer className="w-5 h-5" />
-              <span>柴油加热器</span>
+              <Lightbulb className="w-5 h-5" />
+              <span>灯光</span>
+            </button>
+            <button
+              onClick={() => {navigate('/thermal-center'); setIsMenuOpen(false);}}
+              className="flex items-center space-x-2 w-full text-left px-3 py-2 rounded-md text-base font-medium hover:bg-blue-700 hover:text-white"
+            >
+              <Wind className="w-5 h-5" />
+              <span>热控中心</span>
             </button>
             <button
               onClick={() => {navigate('/settings'); setIsMenuOpen(false);}}

@@ -19,9 +19,6 @@ export interface DieselHeaterStatus {
   lastUpdateTime: string;
 }
 
-// 温控状态机（后端通过启停实现真正的温度控制，因为设备硬件不支持温度调节）
-export type ThermostatState = 'idle' | 'starting' | 'running' | 'stopping' | 'paused';
-
 // 补水循环状态机（接通/断开发动机冷却液大循环阀，定时给加热器小循环补水）
 export type ReplenishState = 'disabled' | 'replenishing' | 'dry';
 
@@ -31,10 +28,6 @@ export interface ControlState {
   heating: boolean;
   hasActiveControl: boolean;
   targetTemperature: number;
-  thermostatEnabled: boolean;
-  thermostatState: ThermostatState;
-  thermostatLowRatio: number;
-  thermostatLowThreshold: number;
   replenishCycleEnabled: boolean;
   replenishState: ReplenishState;
   replenishStateStartedAt: number; // ms epoch，0 表示尚未进入循环
@@ -43,6 +36,9 @@ export interface ControlState {
     dryDurationMs: number;
     replenishDurationMs: number;
   };
+  // 调试态
+  defaultControlEnabled: boolean;
+  manualFrameType: 'heating' | 'noHeating' | null;
 }
 
 // 详细状态接口
@@ -192,6 +188,45 @@ export class DieselHeaterManager {
     }
   }
 
+  // 调试用：手动发一帧任意控制帧（不影响默认 1Hz 循环）
+  async sendOneshotFrame(on: boolean, heating: boolean): Promise<ApiResponse | null> {
+    try {
+      const response = await api.post<ApiResponse>('/diesel-heater/oneshot-frame', { on, heating });
+      return response.data;
+    } catch (error) {
+      console.error('手动发帧失败:', error);
+      throw error;
+    }
+  }
+
+  // 调试用：暂停/恢复默认 1Hz 控制帧
+  async setDefaultControlEnabled(enabled: boolean): Promise<ApiResponse | null> {
+    try {
+      const response = await api.put<ApiResponse>('/diesel-heater/default-control-enabled', { enabled });
+      if (response.data.success) {
+        await this.fetchDetailedStatus();
+      }
+      return response.data;
+    } catch (error) {
+      console.error('设置默认控制帧开关失败:', error);
+      throw error;
+    }
+  }
+
+  // 调试用：开启/停止手动 1Hz 定时帧
+  async setManualFrame(type: 'heating' | 'noHeating', enabled: boolean): Promise<ApiResponse | null> {
+    try {
+      const response = await api.put<ApiResponse>('/diesel-heater/manual-frame', { type, enabled });
+      if (response.data.success) {
+        await this.fetchDetailedStatus();
+      }
+      return response.data;
+    } catch (error) {
+      console.error('设置手动帧失败:', error);
+      throw error;
+    }
+  }
+
   // 开关补水循环（关闭时不会自动操作大小循环电磁阀）
   async setReplenishCycleEnabled(enabled: boolean): Promise<ApiResponse | null> {
     try {
@@ -202,22 +237,6 @@ export class DieselHeaterManager {
       return response.data;
     } catch (error) {
       console.error('设置补水循环开关失败:', error);
-      throw error;
-    }
-  }
-
-  // 设置温控重启阈值比例 (0~1)：温度跌至 targetTemperature × ratio 以下时重启加热
-  async setThermostatLowRatio(ratio: number): Promise<ApiResponse | null> {
-    try {
-      const response = await api.put<ApiResponse>('/diesel-heater/thermostat-ratio', { ratio });
-
-      if (response.data.success) {
-        await this.fetchDetailedStatus();
-      }
-
-      return response.data;
-    } catch (error) {
-      console.error('设置重启阈值比例失败:', error);
       throw error;
     }
   }
@@ -435,8 +454,10 @@ export const toggleHeating = () => dieselHeaterManager.toggleHeating();
 export const connectHeaterPort = () => dieselHeaterManager.connectSecondPort();
 export const disconnectHeaterPort = () => dieselHeaterManager.disconnectSecondPort();
 export const setTargetTemperature = (temperature: number) => dieselHeaterManager.setTargetTemperature(temperature);
-export const setThermostatLowRatio = (ratio: number) => dieselHeaterManager.setThermostatLowRatio(ratio);
 export const setReplenishCycleEnabled = (enabled: boolean) => dieselHeaterManager.setReplenishCycleEnabled(enabled);
+export const sendOneshotFrame = (on: boolean, heating: boolean) => dieselHeaterManager.sendOneshotFrame(on, heating);
+export const setDefaultControlEnabled = (enabled: boolean) => dieselHeaterManager.setDefaultControlEnabled(enabled);
+export const setManualFrame = (type: 'heating' | 'noHeating', enabled: boolean) => dieselHeaterManager.setManualFrame(type, enabled);
 
 // 便捷函数 - 监听器管理
 export const addDieselHeaterListener = (callback: (status: DetailedStatus | null) => void) => {

@@ -8,6 +8,9 @@ import BatteryDetailPage from './pages/BatteryDetailPage';
 import MainBatteryDetailPage from './pages/MainBatteryDetailPage';
 import DieselHeaterPage from './pages/DieselHeaterPage';
 import SettingsPage from './pages/SettingsPage';
+import LightingLayoutPage from './pages/LightingLayoutPage';
+import SpeedControllerPage from './pages/SpeedControllerPage';
+import ThermalCenterPage from './pages/ThermalCenterPage';
 
 function App() {
   return (
@@ -19,8 +22,11 @@ function App() {
           <Route path="/communication-status" element={<CommunicationStatus />} />
           <Route path="/battery/backup" element={<BatteryDetailPage />} />
           <Route path="/battery/main" element={<MainBatteryDetailPage />} />
-          <Route path="/diesel-heater" element={<DieselHeaterPage />} />
+          <Route path="/settings/diesel-heater" element={<DieselHeaterPage />} />
+          <Route path="/lighting" element={<LightingLayoutPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/thermal-center" element={<ThermalCenterPage />} />
+          <Route path="/settings/speed-controller" element={<SpeedControllerPage />} />
         </Routes>
       </Layout>
     </Router>
